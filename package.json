@@ -1,1 +1,1 @@
-{"name":"srayas-portfolio","private":true,"type":"module","scripts":{"build":"node build.mjs","test":"node --test worker/worker.test.mjs"}}
+{"name":"srayas-portfolio","private":true,"type":"module","scripts":{"build":"node build.mjs","test":"node --test worker/worker.test.mjs test/vercel-api.test.mjs"},"dependencies":{"@vercel/blob":"^2.8.0"}}

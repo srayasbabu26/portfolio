@@ -1,4 +1,4 @@
-const OWNER_EMAIL='renowaltpc@gmail.com';
+const OWNER_EMAIL='srayasbabu26@gmail.com';
 const MAX_BYTES=50*1024*1024;
 const TYPES=new Set(['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime']);
 const SEEDS=[{id:'seed-silvia',title:'Nissan Silvia',description:'Automotive poster design. Red, black, and a sense of motion.',category:'design',type:'image/jpeg',url:'/assets/nissan-silvia.jpeg',createdAt:'2026-09-29T00:00:01Z'},{id:'seed-crafting',title:'Hours of crafting',description:'A visual exploration of time, imagination, and the creative process.',category:'design',type:'image/jpeg',url:'/assets/crafting.jpeg',createdAt:'2026-09-29T00:00:00Z'}];

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { del } from '@vercel/blob';
+import { put, del } from '@vercel/blob';
 import {
   json,
   isAuthenticated,
@@ -8,7 +8,8 @@ import {
   MAX_BYTES,
   getWorksManifest,
   saveWorksManifest,
-  createHandler
+  createHandler,
+  getBlobToken
 } from './_lib.js';
 
 export default createHandler(async function handler(request) {
@@ -61,11 +62,34 @@ export default createHandler(async function handler(request) {
       return json({ error: 'File type does not match chosen category.' }, 400);
     }
 
-    if (!mediaUrl || typeof mediaUrl !== 'string') {
-      return json({ error: 'Media URL is missing.' }, 400);
+    let finalUrl = mediaUrl;
+    const id = crypto.randomUUID();
+
+    if (!finalUrl && payload.base64 && typeof payload.base64 === 'string') {
+      const parts = payload.base64.split(',');
+      const buffer = Buffer.from(parts[1] || parts[0], 'base64');
+      const ext = (type.split('/')[1] || 'bin').replace('jpeg', 'jpg');
+      const token = getBlobToken();
+      
+      if (token || process.env.BLOB_STORE_ID) {
+        try {
+          const baseOpts = { access: 'public' };
+          const opts = token ? { ...baseOpts, token } : baseOpts;
+          const blob = await put(`works/${id}.${ext}`, buffer, opts);
+          finalUrl = blob.url;
+        } catch (uploadErr) {
+          console.warn('Vercel Blob put failed, using direct payload:', uploadErr.message);
+          finalUrl = payload.base64;
+        }
+      } else {
+        finalUrl = payload.base64;
+      }
     }
 
-    const id = crypto.randomUUID();
+    if (!finalUrl || typeof finalUrl !== 'string') {
+      return json({ error: 'Media URL or file data is required.' }, 400);
+    }
+
     const newWork = {
       id,
       title: title.trim(),
@@ -73,7 +97,7 @@ export default createHandler(async function handler(request) {
       category,
       type,
       size: Number(size) || 0,
-      url: mediaUrl,
+      url: finalUrl,
       createdAt: new Date().toISOString()
     };
 

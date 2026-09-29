@@ -260,7 +260,7 @@ $('upload-form').addEventListener('submit',async e=>{
 
   try{
     // Try Vercel Blob client token flow
-    let tokenData;
+    let tokenData = null;
     try{
       tokenData=await api('/api/upload-token',{
         method:'POST',
@@ -268,12 +268,7 @@ $('upload-form').addEventListener('submit',async e=>{
         body:JSON.stringify({filename:selectedFile.name,contentType:type})
       });
     }catch(tokenErr){
-      // If 404 or unsupported, fallback to direct worker endpoint
-      if(tokenErr.message&&tokenErr.message.includes('404')){
-        tokenData=null;
-      }else{
-        throw tokenErr;
-      }
+      console.warn('Upload token failed, checking fallback:', tokenErr.message);
     }
 
     if(tokenData&&tokenData.clientToken&&tokenData.pathname){
@@ -306,7 +301,38 @@ $('upload-form').addEventListener('submit',async e=>{
       return;
     }
 
-    // Fallback: Direct upload to /api/works (legacy worker)
+    // Direct server upload fallback (works seamlessly for files up to 4.5 MB)
+    if(selectedFile.size<=4.5*1024*1024){
+      $('upload-progress-label').textContent='Uploading directly…';
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Failed to read file for upload'));
+        reader.readAsDataURL(selectedFile);
+      });
+
+      const res=await api('/api/works',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          title,
+          description:$('work-description').value.trim(),
+          category,
+          type,
+          size:selectedFile.size,
+          base64:base64Data
+        })
+      });
+
+      finish();
+      works.unshift(res.work);
+      filter='all';
+      document.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter==='all')));
+      render();
+      $('upload-dialog').close();
+      $('gallery-status').textContent='Your work has been added.';
+      return;
+    }
     const query=new URLSearchParams({title,description:$('work-description').value.trim(),category});
     const xhr=new XMLHttpRequest();
     xhr.open('POST','/api/works?'+query);

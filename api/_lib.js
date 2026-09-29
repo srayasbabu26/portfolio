@@ -128,14 +128,27 @@ export function isAuthenticated(request) {
   return token === expected;
 }
 
+export function getBlobToken() {
+  let token = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+  if (token.startsWith('BLOB_READ_WRITE_TOKEN=')) {
+    token = token.slice('BLOB_READ_WRITE_TOKEN='.length).trim();
+  }
+  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+    token = token.slice(1, -1).trim();
+  }
+  return token || undefined;
+}
+
 export async function getWorksManifest() {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const token = getBlobToken();
+  if (!token && !process.env.BLOB_STORE_ID) {
     return { works: memWorks, hidden: Array.from(memHidden) };
   }
   try {
+    const opts = token ? { access: 'public', token } : { access: 'public' };
     const [worksRes, hiddenRes] = await Promise.all([
-      get('data/works.json', { access: 'public' }),
-      get('data/hidden.json', { access: 'public' })
+      get('data/works.json', opts),
+      get('data/hidden.json', opts)
     ]);
 
     let works = [];
@@ -161,26 +174,22 @@ export async function getWorksManifest() {
 }
 
 export async function saveWorksManifest(works, hidden) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const token = getBlobToken();
+  if (!token && !process.env.BLOB_STORE_ID) {
     if (works !== undefined) memWorks = works;
     if (hidden !== undefined) memHidden = new Set(hidden);
     return;
   }
 
   const tasks = [];
+  const baseOpts = { access: 'public', addRandomSuffix: false, contentType: 'application/json' };
+  const opts = token ? { ...baseOpts, token } : baseOpts;
+
   if (works !== undefined) {
-    tasks.push(put('data/works.json', JSON.stringify(works), {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/json'
-    }));
+    tasks.push(put('data/works.json', JSON.stringify(works), opts));
   }
   if (hidden !== undefined) {
-    tasks.push(put('data/hidden.json', JSON.stringify(hidden), {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/json'
-    }));
+    tasks.push(put('data/hidden.json', JSON.stringify(hidden), opts));
   }
   await Promise.all(tasks);
 }

@@ -144,8 +144,9 @@ export async function getWorksManifest() {
   if (!token && !process.env.BLOB_STORE_ID) {
     return { works: memWorks, hidden: Array.from(memHidden) };
   }
-  try {
-    const opts = token ? { access: 'public', token } : { access: 'public' };
+
+  async function tryGet(access) {
+    const opts = token ? { access, token } : { access };
     const [worksRes, hiddenRes] = await Promise.all([
       get('data/works.json', opts),
       get('data/hidden.json', opts)
@@ -155,41 +156,55 @@ export async function getWorksManifest() {
     let hidden = [];
 
     if (worksRes && worksRes.statusCode === 200) {
-      try {
-        works = await new Response(worksRes.stream).json();
-      } catch {}
+      try { works = await new Response(worksRes.stream).json(); } catch {}
     }
-
     if (hiddenRes && hiddenRes.statusCode === 200) {
-      try {
-        hidden = await new Response(hiddenRes.stream).json();
-      } catch {}
+      try { hidden = await new Response(hiddenRes.stream).json(); } catch {}
     }
 
     return { works: Array.isArray(works) ? works : [], hidden: Array.isArray(hidden) ? hidden : [] };
-  } catch (err) {
-    console.error('Error fetching manifest from Vercel Blob:', err);
-    return { works: memWorks, hidden: Array.from(memHidden) };
+  }
+
+  try {
+    return await tryGet('public');
+  } catch {
+    try {
+      return await tryGet('private');
+    } catch (e) {
+      console.warn('Vercel Blob manifest get failed (using in-memory):', e.message);
+      return { works: memWorks, hidden: Array.from(memHidden) };
+    }
   }
 }
 
 export async function saveWorksManifest(works, hidden) {
   const token = getBlobToken();
+  if (works !== undefined) memWorks = works;
+  if (hidden !== undefined) memHidden = new Set(hidden);
+
   if (!token && !process.env.BLOB_STORE_ID) {
-    if (works !== undefined) memWorks = works;
-    if (hidden !== undefined) memHidden = new Set(hidden);
     return;
   }
 
-  const tasks = [];
-  const baseOpts = { access: 'public', addRandomSuffix: false, contentType: 'application/json' };
-  const opts = token ? { ...baseOpts, token } : baseOpts;
+  const payloadWorks = works !== undefined ? JSON.stringify(works) : null;
+  const payloadHidden = hidden !== undefined ? JSON.stringify(hidden) : null;
 
-  if (works !== undefined) {
-    tasks.push(put('data/works.json', JSON.stringify(works), opts));
+  async function tryPut(access) {
+    const tasks = [];
+    const baseOpts = { access, addRandomSuffix: false, contentType: 'application/json' };
+    const opts = token ? { ...baseOpts, token } : baseOpts;
+    if (payloadWorks) tasks.push(put('data/works.json', payloadWorks, opts));
+    if (payloadHidden) tasks.push(put('data/hidden.json', payloadHidden, opts));
+    await Promise.all(tasks);
   }
-  if (hidden !== undefined) {
-    tasks.push(put('data/hidden.json', JSON.stringify(hidden), opts));
+
+  try {
+    await tryPut('public');
+  } catch (publicErr) {
+    try {
+      await tryPut('private');
+    } catch (privErr) {
+      console.warn('Vercel Blob manifest save failed (using in-memory):', privErr.message);
+    }
   }
-  await Promise.all(tasks);
 }

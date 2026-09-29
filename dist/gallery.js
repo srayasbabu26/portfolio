@@ -1,6 +1,8 @@
 (()=>{
 const $=id=>document.getElementById(id);
 let works=[],filter='all',canManage=false,selectedFile=null,uploading=false,previewUrl=null,pendingDelete=null;
+let uploadMode='file';
+
 const labels={design:'Graphic design',video:'Video',photo:'Photography'};
 const allowed=['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime'];
 const mime=file=>file.type||({mov:'video/quicktime',mp4:'video/mp4',webm:'video/webm',jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif'}[file.name.split('.').pop().toLowerCase()]||'');
@@ -23,6 +25,61 @@ function setCanManage(state){
   render();
 }
 
+function convertDriveUrl(url, category){
+  if(!url)return '';
+  const m=url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)||url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(m&&m[1]){
+    if(category==='video'){
+      return 'https://drive.google.com/file/d/'+m[1]+'/preview';
+    }
+    return 'https://lh3.googleusercontent.com/d/'+m[1];
+  }
+  return url;
+}
+
+function setUploadMode(mode){
+  uploadMode=mode;
+  const fileWrap=$('file-input-wrap'), linkWrap=$('link-input-wrap');
+  const fileBtn=$('mode-file-btn'), linkBtn=$('mode-link-btn');
+  if(fileWrap)fileWrap.hidden=(mode!=='file');
+  if(linkWrap)linkWrap.hidden=(mode!=='link');
+  if(fileBtn)fileBtn.classList.toggle('active',mode==='file');
+  if(linkBtn)linkBtn.classList.toggle('active',mode==='link');
+  $('upload-status').textContent='';
+  $('file-preview').replaceChildren();
+  if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+}
+
+if($('mode-file-btn'))$('mode-file-btn').addEventListener('click',()=>setUploadMode('file'));
+if($('mode-link-btn'))$('mode-link-btn').addEventListener('click',()=>setUploadMode('link'));
+
+const workUrlInput=$('work-url');
+if(workUrlInput){
+  const handleLinkInput=()=>{
+    const url=workUrlInput.value.trim();
+    if(!url){
+      $('file-preview').replaceChildren();
+      return;
+    }
+    const cat=$('work-category').value;
+    const directUrl=convertDriveUrl(url,cat);
+    const isVideo=cat==='video'||url.includes('.mp4')||url.includes('.webm')||url.includes('/preview');
+    const media=node(isVideo?'video':'img');
+    media.src=directUrl;
+    if(isVideo){
+      media.controls=true;
+      media.preload='metadata';
+    }else{
+      media.alt='Media preview';
+    }
+    $('file-preview').replaceChildren(media);
+  };
+  workUrlInput.addEventListener('input',handleLinkInput);
+  $('work-category').addEventListener('change',()=>{
+    if(uploadMode==='link')handleLinkInput();
+  });
+}
+
 function render(){
   const grid=$('work-grid');
   grid.replaceChildren();
@@ -42,14 +99,24 @@ function render(){
     button.type='button';
     button.setAttribute('aria-label','View '+work.title);
     const isVideo=work.type&&work.type.startsWith('video/');
-    const media=node(isVideo?'video':'img');
-    media.src=work.url;
-    if(isVideo){
+    let media;
+    if(work.url&&work.url.includes('drive.google.com')&&work.url.includes('/preview')){
+      media=node('img');
+      const m=work.url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      media.src=m?'https://lh3.googleusercontent.com/d/'+m[1]:work.url;
+      media.alt=work.title;
+      media.loading='lazy';
+      button.append(node('span','video-badge','Play video'));
+    }else if(isVideo){
+      media=node('video');
+      media.src=work.url;
       media.preload='metadata';
       media.muted=true;
       media.playsInline=true;
       button.append(node('span','video-badge','Play video'));
     }else{
+      media=node('img');
+      media.src=work.url;
       media.alt=work.title;
       media.loading='lazy';
     }
@@ -94,13 +161,37 @@ function openViewer(work){
   $('viewer-title').textContent=work.title;
   $('viewer-description').textContent=work.description;
   $('viewer-category').textContent=labels[work.category]||work.category;
-  const media=node(work.type&&work.type.startsWith('video/')?'video':'img');
-  media.src=work.url;
-  if(media.tagName==='VIDEO'){
+
+  const linkBtn=$('viewer-link');
+  if(linkBtn){
+    if(work.linkUrl){
+      linkBtn.href=work.linkUrl;
+      linkBtn.textContent=work.linkUrl.includes('drive.google.com')?'Open in Google Drive ↗':(work.linkUrl.includes('figma.com')?'Open in Figma ↗':'Open Original Link ↗');
+      linkBtn.hidden=false;
+    }else{
+      linkBtn.hidden=true;
+    }
+  }
+
+  let media;
+  if(work.url&&work.url.includes('drive.google.com')&&work.url.includes('/preview')){
+    media=node('iframe');
+    media.src=work.url;
+    media.allow='autoplay';
+    media.style.width='100%';
+    media.style.height='500px';
+    media.style.border='0';
+  }else if(work.type&&work.type.startsWith('video/')){
+    media=node('video');
+    media.src=work.url;
     media.controls=true;
     media.playsInline=true;
     media.preload='metadata';
-  }else media.alt=work.title;
+  }else{
+    media=node('img');
+    media.src=work.url;
+    media.alt=work.title;
+  }
   $('viewer-media').replaceChildren(media);
   $('viewer-dialog').showModal();
 }
@@ -168,7 +259,16 @@ if(adminForm){
 
 $('upload-dialog').addEventListener('cancel',e=>{if(uploading)e.preventDefault();});
 $('upload-dialog').addEventListener('close',()=>{if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}$('file-preview').replaceChildren();});
-$('add-work').addEventListener('click',()=>{$('upload-form').reset();selectedFile=null;$('file-label').textContent='Choose a file or drop it here';$('upload-status').textContent='';$('upload-progress-wrap').hidden=true;$('file-preview').replaceChildren();$('upload-dialog').showModal();});
+$('add-work').addEventListener('click',()=>{
+  $('upload-form').reset();
+  selectedFile=null;
+  setUploadMode('file');
+  $('file-label').textContent='Choose a file or drop it here';
+  $('upload-status').textContent='';
+  $('upload-progress-wrap').hidden=true;
+  $('file-preview').replaceChildren();
+  $('upload-dialog').showModal();
+});
 
 function choose(file){
   if(!file)return;
@@ -237,12 +337,76 @@ function uploadBinaryToBlob(clientToken, pathname, file, onProgress){
 
 $('upload-form').addEventListener('submit',async e=>{
   e.preventDefault();
-  if(uploading||!selectedFile)return;
-  const type=mime(selectedFile),category=$('work-category').value,title=$('work-title').value.trim();
+  if(uploading)return;
+
+  const category=$('work-category').value,title=$('work-title').value.trim();
+  if(!title){
+    $('upload-status').textContent='Add a title for your piece.';
+    return;
+  }
+
+  // Handle Google Drive / External Link mode
+  if(uploadMode==='link'){
+    const rawUrl=($('work-url').value||'').trim();
+    if(!rawUrl){
+      $('upload-status').textContent='Please paste a Google Drive link or media URL.';
+      return;
+    }
+    uploading=true;
+    const controls=[...$('upload-form').querySelectorAll('input,select,textarea,button')];
+    controls.forEach(c=>c.disabled=true);
+    $('upload-dialog').querySelector('.dialog-close').disabled=true;
+    $('upload-status').textContent='Adding link to portfolio…';
+
+    const directUrl=convertDriveUrl(rawUrl,category);
+    const isVideo=category==='video'||rawUrl.includes('.mp4')||rawUrl.includes('.webm')||rawUrl.includes('/preview');
+
+    try{
+      const res=await api('/api/works',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          title,
+          description:$('work-description').value.trim(),
+          category,
+          type:isVideo?'video/mp4':'image/jpeg',
+          size:0,
+          url:directUrl,
+          linkUrl:rawUrl
+        })
+      });
+
+      uploading=false;
+      controls.forEach(c=>c.disabled=false);
+      $('upload-dialog').querySelector('.dialog-close').disabled=false;
+
+      works.unshift(res.work);
+      filter='all';
+      document.querySelectorAll('[data-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.filter==='all')));
+      render();
+      $('upload-dialog').close();
+      $('gallery-status').textContent='Your work has been added.';
+      return;
+    }catch(err){
+      uploading=false;
+      controls.forEach(c=>c.disabled=false);
+      $('upload-dialog').querySelector('.dialog-close').disabled=false;
+      $('upload-status').textContent=err.message||'Could not save link. Please try again.';
+      return;
+    }
+  }
+
+  // Handle File Upload mode
+  if(!selectedFile){
+    $('upload-status').textContent='Please choose a file to upload, or switch to the Link tab.';
+    return;
+  }
+  const type=mime(selectedFile);
   if(!title||type.startsWith('video/')!==(category==='video')){
     $('upload-status').textContent='Add a title and select Video for video files, or a design/photo category for images.';
     return;
   }
+
   uploading=true;
   const controls=[...$('upload-form').querySelectorAll('input,select,textarea,button')];
   controls.forEach(c=>c.disabled=true);
@@ -333,6 +497,8 @@ $('upload-form').addEventListener('submit',async e=>{
       $('gallery-status').textContent='Your work has been added.';
       return;
     }
+
+    // Fallback: Direct upload to /api/works (legacy worker)
     const query=new URLSearchParams({title,description:$('work-description').value.trim(),category});
     const xhr=new XMLHttpRequest();
     xhr.open('POST','/api/works?'+query);

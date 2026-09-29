@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
-import { json, isAuthenticated, ALLOWED_TYPES, MAX_BYTES } from './_lib.js';
+import { json, isAuthenticated, ALLOWED_TYPES, MAX_BYTES, createHandler } from './_lib.js';
 
-export default async function handler(request) {
+export default createHandler(async function handler(request) {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405);
   }
@@ -46,4 +46,4 @@ export default async function handler(request) {
     console.error('Failed to generate client upload token:', err);
     return json({ error: 'Could not prepare upload. Please try again.' }, 500);
   }
-}
+});

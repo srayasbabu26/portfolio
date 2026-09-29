@@ -1,6 +1,6 @@
-import { json } from './_lib.js';
+import { json, createHandler } from './_lib.js';
 
-export default async function handler(request) {
+export default createHandler(async function handler(request) {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405);
   }
@@ -10,4 +10,4 @@ export default async function handler(request) {
     200,
     { 'Set-Cookie': 'portfolio_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' }
   );
-}
+});

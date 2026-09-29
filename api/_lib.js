@@ -60,6 +60,67 @@ export function createAuthToken(password) {
   return crypto.createHmac('sha256', 'portfolio-secret-salt').update(password).digest('hex');
 }
 
+export function createHandler(fn) {
+  return async function(req, res) {
+    // If running in Vercel Node.js Serverless runtime (req, res pattern)
+    if (res && typeof res.setHeader === 'function') {
+      try {
+        let body = req.body;
+        if (typeof body === 'string' && body.trim()) {
+          try { body = JSON.parse(body); } catch {}
+        } else if (!body && (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) {
+          body = await new Promise((resolve) => {
+            let data = '';
+            req.on('data', chunk => { data += chunk; });
+            req.on('end', () => {
+              try { resolve(JSON.parse(data)); } catch { resolve({}); }
+            });
+            req.on('error', () => resolve({}));
+          });
+        }
+
+        const host = req.headers.host || 'localhost';
+        const proto = req.headers['x-forwarded-proto'] || 'https';
+        const urlStr = `${proto}://${host}${req.url}`;
+
+        const requestWrapper = {
+          method: req.method,
+          url: urlStr,
+          headers: {
+            get(name) {
+              const val = req.headers[name.toLowerCase()];
+              return Array.isArray(val) ? val.join(', ') : (val !== undefined ? String(val) : null);
+            }
+          },
+          async json() {
+            return body || {};
+          }
+        };
+
+        const response = await fn(requestWrapper);
+        const status = response.status || 200;
+        
+        response.headers.forEach((val, key) => {
+          res.setHeader(key, val);
+        });
+
+        const text = await response.text();
+        res.statusCode = status;
+        res.end(text);
+      } catch (err) {
+        console.error('API Error:', err);
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: err.message || 'Internal server error' }));
+      }
+      return;
+    }
+
+    // Standard Web Request -> Response (Edge or unit tests)
+    return fn(req);
+  };
+}
+
 export function isAuthenticated(request) {
   const cookies = parseCookies(request);
   const token = cookies['portfolio_auth'];

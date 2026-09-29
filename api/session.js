@@ -1,6 +1,6 @@
-import { json, isAuthenticated, MAX_BYTES } from './_lib.js';
+import { json, isAuthenticated, MAX_BYTES, createHandler } from './_lib.js';
 
-export default async function handler(request) {
+export default createHandler(async function handler(request) {
   if (request.method !== 'GET') {
     return json({ error: 'Method not allowed' }, 405);
   }
@@ -10,4 +10,4 @@ export default async function handler(request) {
     maxBytes: MAX_BYTES,
     hasBlobStorage: Boolean(process.env.BLOB_READ_WRITE_TOKEN)
   });
-}
+});

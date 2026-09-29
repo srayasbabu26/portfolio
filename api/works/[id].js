@@ -1,7 +1,7 @@
 import { del } from '@vercel/blob';
-import { json, isAuthenticated, SEEDS, getWorksManifest, saveWorksManifest } from '../_lib.js';
+import { json, isAuthenticated, SEEDS, getWorksManifest, saveWorksManifest, createHandler } from '../_lib.js';
 
-export default async function handler(request) {
+export default createHandler(async function handler(request) {
   if (request.method !== 'DELETE') {
     return json({ error: 'Method not allowed' }, 405);
   }
@@ -52,4 +52,4 @@ export default async function handler(request) {
     console.error('Failed to delete work:', err);
     return json({ error: 'Failed to delete work.' }, 500);
   }
-}
+});

@@ -7,10 +7,11 @@ import {
   ALLOWED_TYPES,
   MAX_BYTES,
   getWorksManifest,
-  saveWorksManifest
+  saveWorksManifest,
+  createHandler
 } from './_lib.js';
 
-export default async function handler(request) {
+export default createHandler(async function handler(request) {
   const url = new URL(request.url);
 
   // 1. GET /api/works — List all works
@@ -136,4 +137,4 @@ export default async function handler(request) {
   }
 
   return json({ error: 'Method not allowed.' }, 405);
-}
+});
